@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bill Maker</title>
+<meta name="theme-color" content="#0f7a4a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{--bg:#f3f6f1;--card:#fff;--ink:#16221a;--mute:#5d6b60;--line:#d5ddd3;--acc:#0f7a4a;--accink:#fff;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101813;--card:#18231c;--ink:#e8f0ea;--mute:#9bab9f;--line:#2b3a2f;--acc:#3ecf8e;--accink:#06160d}}
+:root[data-theme="dark"]{--bg:#101813;--card:#18231c;--ink:#e8f0ea;--mute:#9bab9f;--line:#2b3a2f;--acc:#3ecf8e;--accink:#06160d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Hind Madurai","Noto Sans Tamil",system-ui,sans-serif}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:1.5rem;margin:8px 0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+label{display:block;font-size:.85rem;color:var(--mute);margin:10px 0 4px}
+input{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+input:focus,button:focus-visible,a:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.row{display:grid;grid-template-columns:1fr 64px 90px 36px;gap:6px;margin-bottom:6px}
+.row input{padding:8px}
+.x{border:1px solid var(--line);background:none;color:var(--mute);border-radius:8px;cursor:pointer}
+.btn{display:inline-block;padding:12px 16px;border-radius:10px;border:0;background:var(--acc);color:var(--accink);font:inherit;font-weight:600;cursor:pointer;text-decoration:none;text-align:center}
+.btn.alt{background:none;color:var(--ink);border:1px solid var(--line)}
+.total{display:flex;justify-content:space-between;font-size:1.3rem;font-weight:700;margin:12px 0}
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+.acts>*{flex:1 1 140px}
+pre{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;font:.9rem/1.5 ui-monospace,monospace;margin:0 0 10px}
+small{color:var(--mute)}
+</style>
+</head>
+<body>
+<main>
+<h1>Bill Maker</h1>
+
+<div class="card">
+<label for="biz">Business name</label><input id="biz" placeholder="My Shop">
+<label for="upi">Payment details (bank / UPI / number)</label><input id="upi" placeholder="Acc no / UPI ID">
+<label for="no">Bill number</label><input id="no" inputmode="numeric">
+<small>Business name, payment details and bill number save in this browser.</small>
+</div>
+
+<div class="card">
+<label for="cn">Customer name</label><input id="cn" placeholder="Customer name">
+<label for="ph">WhatsApp number (with country code)</label><input id="ph" inputmode="tel" placeholder="94771234567">
+<label>Items (name, qty, price)</label>
+<div id="items"></div>
+<button class="btn alt" id="add" type="button">Add item</button>
+<div class="total"><span>Total</span><span id="tot">0</span></div>
+</div>
+
+<div class="card">
+<pre id="prev"></pre>
+<div class="acts">
+<a class="btn" id="wa" target="_blank" rel="noopener">Send on WhatsApp</a>
+<button class="btn alt" id="cp" type="button">Copy bill</button>
+<button class="btn alt" id="pdf" type="button">Save as PDF</button>
+<button class="btn alt" id="nx" type="button">Start next bill</button>
+</div>
+</div>
+</main>
+<script src="jspdf.umd.min.js"></script>
+<script>
+var cur={rows:[],sum:0};
+var $=function(i){return document.getElementById(i)};
+function ld(k,d){try{var v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}}
+function sv(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+$('biz').value=ld('biz','');$('upi').value=ld('upi','');$('no').value=ld('no','1');
+function row(){
+  var r=document.createElement('div');r.className='row';
+  r.innerHTML='<input class="n" placeholder="Item"><input class="q" inputmode="decimal" value="1"><input class="p" inputmode="decimal" placeholder="Price"><button class="x" type="button" aria-label="Remove item">x</button>';
+  r.querySelector('.x').onclick=function(){r.remove();up()};
+  $('items').appendChild(r);
+}
+function money(n){return (Math.round(n*100)/100).toLocaleString('en-US')}
+function up(){
+  var lines=[],rows=[],sum=0;
+  document.querySelectorAll('#items .row').forEach(function(r){
+    var n=r.querySelector('.n').value.trim(),q=parseFloat(r.querySelector('.q').value)||0,p=parseFloat(r.querySelector('.p').value)||0;
+    if(n&&q&&p){sum+=q*p;lines.push(n+' x'+q+' = '+money(q*p));rows.push([n,q,p])}
+  });
+  $('tot').textContent=money(sum);
+  var t=($('biz').value||'Bill')+'\nBill No: '+$('no').value+'\nDate: '+new Date().toLocaleDateString('en-GB')+'\nCustomer: '+($('cn').value||'-')+'\n\n'+(lines.join('\n')||'(add items)')+'\n\nTotal: '+money(sum);
+  if($('upi').value)t+='\nPay to: '+$('upi').value;
+  t+='\n\nThank you!';
+  cur={rows:rows,sum:sum};
+  $('prev').textContent=t;
+  var ph=$('ph').value.replace(/\D/g,'');
+  $('wa').href='https://wa.me/'+ph+'?text='+encodeURIComponent(t);
+  sv('biz',$('biz').value);sv('upi',$('upi').value);sv('no',$('no').value);
+}
+document.addEventListener('input',up);
+$('add').onclick=function(){row()};
+$('cp').onclick=function(){
+  var t=$('prev').textContent;
+  try{navigator.clipboard.writeText(t).then(function(){$('cp').textContent='Copied'})}catch(e){$('cp').textContent='Copy failed'}
+  setTimeout(function(){$('cp').textContent='Copy bill'},1500);
+};
+$('pdf').onclick=async function(){
+  var b=$('pdf');
+  if(!cur.rows.length){b.textContent='Add items first';setTimeout(function(){b.textContent='Save as PDF'},1500);return}
+  try{
+    var d=new window.jspdf.jsPDF(),y=22,R=190;
+    d.setFontSize(20);d.text($('biz').value||'Bill',20,y);y+=9;
+    d.setFontSize(11);
+    d.text('Bill No: '+$('no').value+'    Date: '+new Date().toLocaleDateString('en-GB'),20,y);y+=6;
+    d.text('Customer: '+($('cn').value||'-'),20,y);y+=12;
+    d.setFont('helvetica','bold');d.text('Item',20,y);d.text('Qty',110,y,{align:'right'});d.text('Price',150,y,{align:'right'});d.text('Amount',R,y,{align:'right'});
+    d.setFont('helvetica','normal');y+=3;d.line(20,y,R,y);y+=7;
+    cur.rows.forEach(function(r){
+      if(y>270){d.addPage();y=22}
+      d.text(String(r[0]).slice(0,45),20,y);d.text(String(r[1]),110,y,{align:'right'});d.text(money(r[2]),150,y,{align:'right'});d.text(money(r[1]*r[2]),R,y,{align:'right'});y+=7;
+    });
+    d.line(20,y,R,y);y+=9;
+    d.setFont('helvetica','bold');d.setFontSize(14);d.text('Total: '+money(cur.sum),R,y,{align:'right'});y+=12;
+    d.setFont('helvetica','normal');d.setFontSize(11);
+    if($('upi').value){d.text('Pay to: '+$('upi').value,20,y);y+=8}
+    d.text('Thank you!',20,y);
+    var blob=d.output('blob'),name='bill-'+$('no').value+'.pdf';
+    var f=new File([blob],name,{type:'application/pdf'});
+    if(navigator.canShare&&navigator.canShare({files:[f]})){
+      await navigator.share({files:[f],title:name});b.textContent='Shared';
+    }else{
+      var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;
+      document.body.appendChild(a);a.click();a.remove();b.textContent='PDF saved';
+    }
+  }catch(e){b.textContent=(e&&e.name==='AbortError')?'Save as PDF':'PDF failed'}
+  setTimeout(function(){b.textContent='Save as PDF'},2000);
+};
+$('nx').onclick=function(){
+  $('no').value=(parseInt($('no').value)||0)+1;
+  $('cn').value='';$('ph').value='';$('items').innerHTML='';row();up();
+};
+row();up();
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){})}
+</script>
+</body>
+</html>
